@@ -1,90 +1,89 @@
-# Obsidian Sample Plugin
+# Plugin Daily Kanban
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+Un plugin Obsidian puissant pour gérer vos tâches dans un tableau Kanban. Organisez vos tâches quotidiennes sur plusieurs colonnes (Backlog, À faire, En cours, Terminé) avec la fonctionnalité de glisser-déposer et le support des tags de priorité.
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+## Fonctionnalités
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open modal (simple)" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+- **Vue Tableau Kanban** : Visualisez vos tâches dans un tableau multi-colonnes
+- **Glisser-déposer** : Déplacez les tâches entre les colonnes
+- **Tags de Priorité** : Ajoutez des badges de priorité colorés (#MIT, #I, #NI) à vos tâches
+- **Cycle de Statut Rapide** : Cliquez sur une carte pour parcourir les statuts
+- **Support Multi-fichiers** : Chargez les tâches depuis plusieurs fichiers markdown dans un dossier configuré
+- **Mises à Jour en Direct** : Le tableau se rafraîchit automatiquement quand les fichiers sont modifiés
+- **Configuration Flexible** : Configurez le dossier et le titre de section à surveiller
 
-## First time developing plugins?
+## Utilisation
 
-Quick starting guide for new plugin devs:
+### Configuration Initiale
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+1. Installez le plugin dans votre vault Obsidian
+2. Ouvrez les paramètres du plugin et configurez :
+   - **Chemin du Dossier** : Chemin du dossier contenant vos fichiers de tâches
+   - **Titre de Section** : Le titre sous lequel les tâches sont listées (ex: "## Tâches")
+3. Cliquez sur l'icône Kanban dans le ruban pour ouvrir le tableau Daily Kanban
 
-## Releasing new releases
+### Format des Tâches
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+Les tâches doivent être formatées comme des cases à cocher markdown :
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+```markdown
+## Tâches
 
-## Adding your plugin to the community plugin list
-
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
-
-## How to use
-
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
-
-## Manually installing the plugin
-
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
-
-## Improve code quality with eslint
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- This project already has eslint preconfigured, you can invoke a check by running`npm run lint`
-- Together with a custom eslint [plugin](https://github.com/obsidianmd/eslint-plugin) for Obsidan specific code guidelines.
-- A GitHub action is preconfigured to automatically lint every commit on all branches.
-
-## Funding URL
-
-You can include funding URLs where people who use your plugin can financially support it.
-
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
-
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
-}
+- [b] Tâche en backlog
+- [ ] Tâche à faire
+- [/] Tâche en cours
+- [x] Tâche terminée
 ```
 
-If you have multiple URLs, you can also do:
+### Tags de Priorité
 
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
+Ajoutez des badges de priorité à vos tâches en utilisant des tags :
+
+```markdown
+## Tâches
+
+- [ ] Implémenter la fonctionnalité #MIT
+- [ ] Écrire la documentation #I
+- [ ] Relire le code #NI
 ```
 
-## API Documentation
+**Niveaux de Priorité :**
+- **#MIT** - À faire absolument (Badge rouge)
+- **#I** - Important (Badge jaune)
+- **#NI** - Souhaitable (Badge vert)
 
-See https://docs.obsidian.md
+Le texte du tag sera supprimé du titre de la tâche et affiché comme un badge coloré sur la carte Kanban.
+
+### Interactions
+
+- **Glisser-déposer** : Déplacez les cartes entre les colonnes
+- **Clic** : Cliquez sur une carte pour parcourir les statuts (backlog → à faire → en cours → terminé)
+- **Sauvegarde Automatique** : Les modifications sont automatiquement sauvegardées dans vos fichiers markdown
+
+## Développement
+
+### Installation
+
+- Clonez ce dépôt
+- Assurez-vous que votre NodeJS est au minimum v16 (`node --version`)
+- Exécutez `npm i` pour installer les dépendances
+- Exécutez `npm run dev` pour compiler en mode surveillance
+- Exécutez `npm run build` pour créer une build de production
+
+### Installation Manuelle
+
+1. Copiez `main.js`, `styles.css` et `manifest.json` dans le dossier des plugins de votre vault :
+   ```
+   DossierVault/.obsidian/plugins/daily-kanban/
+   ```
+2. Rechargez Obsidian ou redémarrez-le
+3. Activez le plugin dans Paramètres > Plugins communautaires
+
+### Qualité du Code
+
+- Exécutez `npm run lint` pour vérifier la qualité du code avec ESLint
+- ESLint est pré-configuré avec les directives spécifiques à Obsidian
+
+## Support
+
+Pour les problèmes, les bugs ou les demandes de fonctionnalités, veuillez ouvrir une issue sur GitHub.
