@@ -24,7 +24,7 @@ export default class DailyKanbanPlugin extends Plugin {
 		});
 
 		// Add ribbon icon to open Kanban view
-		this.addRibbonIcon('kanban-board', 'Daily Kanban', () => {
+		this.addRibbonIcon('layout-grid', 'Daily Kanban', () => {
 			this.openKanban();
 		});
 
@@ -98,7 +98,7 @@ class KanbanView extends ItemView {
 	}
 
 	getIcon(): string {
-		return 'kanban-board';
+		return 'layout-grid';
 	}
 
 	async onOpen() {
