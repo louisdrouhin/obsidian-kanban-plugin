@@ -7,6 +7,7 @@ interface KanbanTask {
 	text: string;
 	status: 'backlog' | 'todo' | 'in-progress' | 'done';
 	sourceFile: string;
+	sourceFileName: string;
 	originalLine: number;
 }
 
@@ -39,6 +40,27 @@ export default class DailyKanbanPlugin extends Plugin {
 
 		// Add settings tab
 		this.addSettingTab(new DailyKanbanSettingTab(this.app, this));
+
+		// Listen for file changes and refresh the Kanban view
+		this.registerEvent(this.app.vault.on('modify', (file: TFile) => {
+			if (file instanceof TFile && file.extension === 'md') {
+				// Check if the modified file is in our watched folder
+				const folderPath = this.settings.folderPath;
+				if (file.path.startsWith(folderPath)) {
+					this.refreshKanban();
+				}
+			}
+		}));
+
+		// Also listen for file deletions
+		this.registerEvent(this.app.vault.on('delete', (file) => {
+			if (file instanceof TFile && file.extension === 'md') {
+				const folderPath = this.settings.folderPath;
+				if (file.path.startsWith(folderPath)) {
+					this.refreshKanban();
+				}
+			}
+		}));
 	}
 
 	async openKanban() {
@@ -83,6 +105,8 @@ class KanbanView extends ItemView {
 	tasks: KanbanTask[] = [];
 	draggedCard: HTMLElement | null = null;
 	draggedTask: KanbanTask | null = null;
+	isRendering: boolean = false;
+	renderTimeout: NodeJS.Timeout | null = null;
 
 	constructor(leaf: WorkspaceLeaf, plugin: DailyKanbanPlugin) {
 		super(leaf);
@@ -106,13 +130,26 @@ class KanbanView extends ItemView {
 	}
 
 	async render() {
-		const container = this.containerEl.children[1] as HTMLElement | undefined;
-		if (!container) return;
+		// Prevent concurrent renders that cause duplicates
+		if (this.isRendering) {
+			return;
+		}
 
-		container.empty();
+		// Debounce rapid refresh calls
+		if (this.renderTimeout) {
+			clearTimeout(this.renderTimeout);
+		}
 
-		// Load tasks
-		await this.loadTasks();
+		this.renderTimeout = setTimeout(async () => {
+			this.isRendering = true;
+			try {
+				const container = this.containerEl.children[1] as HTMLElement | undefined;
+				if (!container) return;
+
+				container.empty();
+
+				// Load tasks
+				await this.loadTasks();
 
 		// Create Kanban board
 		const kanbanContainer = container.createDiv('kanban-container');
@@ -124,27 +161,31 @@ class KanbanView extends ItemView {
 			{ id: 'done', label: 'Done', status: 'done' as const }
 		];
 
-		columns.forEach(column => {
-			const columnEl = kanbanContainer.createDiv(`kanban-column ${column.id}`);
-			columnEl.setAttribute('data-status', column.status);
+				columns.forEach(column => {
+					const columnEl = kanbanContainer.createDiv(`kanban-column ${column.id}`);
+					columnEl.setAttribute('data-status', column.status);
 
-			const header = columnEl.createDiv('kanban-column-header');
-			header.textContent = column.label;
+					const header = columnEl.createDiv('kanban-column-header');
+					header.textContent = column.label;
 
-			const cardsContainer = columnEl.createDiv('kanban-cards');
+					const cardsContainer = columnEl.createDiv('kanban-cards');
 
-			// Filter tasks for this column
-			const columnTasks = this.tasks.filter(t => t.status === column.status);
+					// Filter tasks for this column
+					const columnTasks = this.tasks.filter(t => t.status === column.status);
 
-			columnTasks.forEach(task => {
-				this.createCard(cardsContainer, task);
-			});
+					columnTasks.forEach(task => {
+						this.createCard(cardsContainer, task);
+					});
 
-			// Set up drop zone
-			this.setupDropZone(columnEl);
-		});
+					// Set up drop zone
+					this.setupDropZone(columnEl);
+				});
 
-		new Notice('Daily Kanban loaded');
+				new Notice('Daily Kanban loaded');
+			} finally {
+				this.isRendering = false;
+			}
+		}, 300); // Debounce for 300ms
 	}
 
 	private createCard(container: HTMLElement, task: KanbanTask) {
@@ -157,7 +198,7 @@ class KanbanView extends ItemView {
 		title.textContent = task.text;
 
 		const source = card.createDiv('kanban-card-source');
-		source.textContent = task.sourceFile;
+		source.textContent = task.sourceFileName;
 
 		// Drag event listeners
 		card.addEventListener('dragstart', (e) => {
@@ -230,10 +271,10 @@ class KanbanView extends ItemView {
 
 			// Find and update the task line
 			const statusMap: Record<KanbanTask['status'], string> = {
-				'backlog': '- [b]',
-				'todo': '- [ ]',
-				'in-progress': '- [/]',
-				'done': '- [x]'
+				'backlog': '[b]',
+				'todo': '[ ]',
+				'in-progress': '[/]',
+				'done': '[x]'
 			};
 
 			const newCheckbox = statusMap[newStatus];
@@ -241,16 +282,29 @@ class KanbanView extends ItemView {
 
 			// Replace the checkbox in the line
 			if (oldLine) {
-				const updatedLine = oldLine.replace(/^(\s*)-\s*\[[^\]]*\]/, `$1${newCheckbox}`);
-				lines[task.originalLine] = updatedLine;
+				// Replace any checkbox pattern with the new one
+				const updatedLine = oldLine.replace(/\[[^\]]*\]/, newCheckbox);
 
-				await this.plugin.app.vault.modify(file, lines.join('\n'));
+				if (updatedLine !== oldLine) {
+					lines[task.originalLine] = updatedLine;
+					const newContent = lines.join('\n');
+					await this.plugin.app.vault.modify(file, newContent);
 
-				// Update local task
-				task.status = newStatus;
+					console.log('Task updated:', {
+						file: task.sourceFile,
+						line: task.originalLine,
+						oldLine: oldLine,
+						newLine: updatedLine
+					});
 
-				// Re-render the board
-				await this.render();
+					// Update local task
+					task.status = newStatus;
+
+					// Re-render the board
+					await this.render();
+				} else {
+					new Notice('Could not find checkbox to update');
+				}
 			}
 		} catch (error) {
 			console.error('Error updating task:', error);
@@ -275,7 +329,7 @@ class KanbanView extends ItemView {
 		for (const file of files) {
 			try {
 				const content = await this.plugin.app.vault.read(file);
-				const tasks = this.parseTasksFromContent(content, file.name);
+				const tasks = this.parseTasksFromContent(content, file.path, file.name);
 				this.tasks.push(...tasks);
 			} catch (error) {
 				console.error(`Error reading file ${file.path}:`, error);
@@ -283,7 +337,7 @@ class KanbanView extends ItemView {
 		}
 	}
 
-	private parseTasksFromContent(content: string, filename: string): KanbanTask[] {
+	private parseTasksFromContent(content: string, filePath: string, filename: string): KanbanTask[] {
 		const tasks: KanbanTask[] = [];
 		const lines = content.split('\n');
 		let inTaskSection = false;
@@ -319,7 +373,8 @@ class KanbanView extends ItemView {
 					tasks.push({
 						text,
 						status,
-						sourceFile: filename,
+						sourceFile: filePath,
+						sourceFileName: filename,
 						originalLine: i
 					});
 				}
