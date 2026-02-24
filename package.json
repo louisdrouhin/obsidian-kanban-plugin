@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
+	"name": "obsidian-daily-kanban",
 	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "Display a Kanban board view of tasks from your daily notes",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {

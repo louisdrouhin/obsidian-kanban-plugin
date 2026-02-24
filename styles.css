@@ -1,8 +1,98 @@
-/*
+/* Daily Kanban Plugin Styles */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.kanban-container {
+	display: flex;
+	gap: 16px;
+	padding: 16px;
+	height: 100%;
+	overflow-x: auto;
+	background-color: var(--background-primary);
+}
 
-If your plugin does not need CSS, delete this file.
+.kanban-column {
+	flex: 0 0 320px;
+	display: flex;
+	flex-direction: column;
+	background-color: var(--background-secondary);
+	border-radius: 8px;
+	padding: 12px;
+	min-height: 400px;
+	border: 1px solid var(--divider-color);
+}
 
-*/
+.kanban-column-header {
+	font-weight: 600;
+	font-size: 14px;
+	padding-bottom: 12px;
+	margin-bottom: 8px;
+	border-bottom: 2px solid var(--divider-color);
+	color: var(--text-normal);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.kanban-cards {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	flex: 1;
+}
+
+.kanban-card {
+	background-color: var(--background-primary);
+	border: 1px solid var(--divider-color);
+	border-radius: 6px;
+	padding: 12px;
+	cursor: grab;
+	transition: all 0.2s ease;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+	user-select: none;
+}
+
+.kanban-card:hover {
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+	transform: translateY(-2px);
+}
+
+.kanban-card.dragging {
+	opacity: 0.5;
+	cursor: grabbing;
+}
+
+.kanban-card-title {
+	font-size: 13px;
+	color: var(--text-normal);
+	margin-bottom: 8px;
+	line-height: 1.4;
+	word-wrap: break-word;
+}
+
+.kanban-card-source {
+	font-size: 11px;
+	color: var(--text-faint);
+	font-style: italic;
+	border-top: 1px solid var(--divider-color);
+	padding-top: 8px;
+	margin-top: 8px;
+}
+
+.kanban-column.drop-target {
+	background-color: var(--background-modifier-hover);
+}
+
+/* Column color indicators */
+.kanban-column.backlog {
+	--column-accent: var(--color-red);
+}
+
+.kanban-column.todo {
+	--column-accent: var(--color-yellow);
+}
+
+.kanban-column.in-progress {
+	--column-accent: var(--color-blue);
+}
+
+.kanban-column.done {
+	--column-accent: var(--color-green);
+}

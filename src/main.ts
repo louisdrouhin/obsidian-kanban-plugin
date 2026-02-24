@@ -1,99 +1,335 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import {App, ItemView, Notice, Plugin, TFile, TFolder, WorkspaceLeaf} from 'obsidian';
+import {DEFAULT_SETTINGS, DailyKanbanSettings, DailyKanbanSettingTab} from "./settings";
 
-// Remember to rename these classes and interfaces!
+const KANBAN_VIEW_TYPE = 'daily-kanban';
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+interface KanbanTask {
+	text: string;
+	status: 'backlog' | 'todo' | 'in-progress' | 'done';
+	sourceFile: string;
+	originalLine: number;
+}
+
+export default class DailyKanbanPlugin extends Plugin {
+	settings: DailyKanbanSettings;
+	kanbanView: KanbanView | null = null;
 
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
+		// Register the Kanban view
+		this.registerView(KANBAN_VIEW_TYPE, (leaf: WorkspaceLeaf) => {
+			this.kanbanView = new KanbanView(leaf, this);
+			return this.kanbanView;
 		});
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
+		// Add ribbon icon to open Kanban view
+		this.addRibbonIcon('kanban-board', 'Daily Kanban', () => {
+			this.openKanban();
+		});
 
-		// This adds a simple command that can be triggered anywhere
+		// Add command to open Kanban
 		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
+			id: 'open-daily-kanban',
+			name: 'Open Daily Kanban',
 			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
+				this.openKanban();
 			}
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-
+		// Add settings tab
+		this.addSettingTab(new DailyKanbanSettingTab(this.app, this));
 	}
 
-	onunload() {
+	async openKanban() {
+		const { workspace } = this.app;
+
+		// Check if view already exists
+		const leaves = workspace.getLeavesOfType(KANBAN_VIEW_TYPE);
+		let leaf: WorkspaceLeaf | null = null;
+
+		if (leaves.length > 0) {
+			leaf = leaves[0] || null;
+		} else {
+			const rightLeaf = workspace.getRightLeaf(false);
+			leaf = rightLeaf || null;
+			if (leaf) {
+				await leaf.setViewState({ type: KANBAN_VIEW_TYPE });
+			}
+		}
+
+		if (leaf) {
+			workspace.revealLeaf(leaf);
+		}
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<DailyKanbanSettings>);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
+
+	refreshKanban() {
+		if (this.kanbanView) {
+			this.kanbanView.render();
+		}
+	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
+class KanbanView extends ItemView {
+	plugin: DailyKanbanPlugin;
+	tasks: KanbanTask[] = [];
+	draggedCard: HTMLElement | null = null;
+	draggedTask: KanbanTask | null = null;
+
+	constructor(leaf: WorkspaceLeaf, plugin: DailyKanbanPlugin) {
+		super(leaf);
+		this.plugin = plugin;
 	}
 
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
+	getViewType(): string {
+		return KANBAN_VIEW_TYPE;
 	}
 
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
+	getDisplayText(): string {
+		return 'Daily Kanban';
+	}
+
+	getIcon(): string {
+		return 'kanban-board';
+	}
+
+	async onOpen() {
+		await this.render();
+	}
+
+	async render() {
+		const container = this.containerEl.children[1] as HTMLElement | undefined;
+		if (!container) return;
+
+		container.empty();
+
+		// Load tasks
+		await this.loadTasks();
+
+		// Create Kanban board
+		const kanbanContainer = container.createDiv('kanban-container');
+
+		const columns = [
+			{ id: 'backlog', label: 'Backlog', status: 'backlog' as const },
+			{ id: 'todo', label: 'To Do', status: 'todo' as const },
+			{ id: 'in-progress', label: 'In Progress', status: 'in-progress' as const },
+			{ id: 'done', label: 'Done', status: 'done' as const }
+		];
+
+		columns.forEach(column => {
+			const columnEl = kanbanContainer.createDiv(`kanban-column ${column.id}`);
+			columnEl.setAttribute('data-status', column.status);
+
+			const header = columnEl.createDiv('kanban-column-header');
+			header.textContent = column.label;
+
+			const cardsContainer = columnEl.createDiv('kanban-cards');
+
+			// Filter tasks for this column
+			const columnTasks = this.tasks.filter(t => t.status === column.status);
+
+			columnTasks.forEach(task => {
+				this.createCard(cardsContainer, task);
+			});
+
+			// Set up drop zone
+			this.setupDropZone(columnEl);
+		});
+
+		new Notice('Daily Kanban loaded');
+	}
+
+	private createCard(container: HTMLElement, task: KanbanTask) {
+		const card = container.createDiv('kanban-card');
+		card.draggable = true;
+		card.setAttribute('data-source', task.sourceFile);
+		card.setAttribute('data-line', task.originalLine.toString());
+
+		const title = card.createDiv('kanban-card-title');
+		title.textContent = task.text;
+
+		const source = card.createDiv('kanban-card-source');
+		source.textContent = task.sourceFile;
+
+		// Drag event listeners
+		card.addEventListener('dragstart', (e) => {
+			this.draggedCard = card;
+			this.draggedTask = task;
+			card.classList.add('dragging');
+			if (e.dataTransfer) {
+				e.dataTransfer.effectAllowed = 'move';
+			}
+		});
+
+		card.addEventListener('dragend', () => {
+			card.classList.remove('dragging');
+			this.draggedCard = null;
+			this.draggedTask = null;
+		});
+
+		// Click to cycle through statuses
+		card.addEventListener('click', (e) => {
+			if (e.button === 0) { // Left click
+				this.cycleTaskStatus(task);
+			}
+		});
+	}
+
+	private setupDropZone(column: HTMLElement) {
+		column.addEventListener('dragover', (e) => {
+			e.preventDefault();
+			if (e.dataTransfer) {
+				e.dataTransfer.dropEffect = 'move';
+				column.classList.add('drop-target');
+			}
+		});
+
+		column.addEventListener('dragleave', () => {
+			column.classList.remove('drop-target');
+		});
+
+		column.addEventListener('drop', async (e) => {
+			e.preventDefault();
+			column.classList.remove('drop-target');
+
+			if (this.draggedTask) {
+				const statusAttr = column.getAttribute('data-status');
+				if (statusAttr && (statusAttr === 'backlog' || statusAttr === 'todo' || statusAttr === 'in-progress' || statusAttr === 'done')) {
+					await this.updateTaskStatus(this.draggedTask, statusAttr as KanbanTask['status']);
+				}
+			}
+		});
+	}
+
+	private async cycleTaskStatus(task: KanbanTask) {
+		const statuses: KanbanTask['status'][] = ['backlog', 'todo', 'in-progress', 'done'];
+		const currentIndex = statuses.indexOf(task.status);
+		const nextStatus = statuses[(currentIndex + 1) % statuses.length] || 'todo';
+		await this.updateTaskStatus(task, nextStatus);
+	}
+
+	private async updateTaskStatus(task: KanbanTask, newStatus: KanbanTask['status']) {
+		const file = this.plugin.app.vault.getAbstractFileByPath(task.sourceFile);
+
+		if (!(file instanceof TFile)) {
+			new Notice('Could not find file: ' + task.sourceFile);
+			return;
+		}
+
+		try {
+			const content = await this.plugin.app.vault.read(file);
+			const lines = content.split('\n');
+
+			// Find and update the task line
+			const statusMap: Record<KanbanTask['status'], string> = {
+				'backlog': '- [b]',
+				'todo': '- [ ]',
+				'in-progress': '- [/]',
+				'done': '- [x]'
+			};
+
+			const newCheckbox = statusMap[newStatus];
+			const oldLine = lines[task.originalLine];
+
+			// Replace the checkbox in the line
+			if (oldLine) {
+				const updatedLine = oldLine.replace(/^(\s*)-\s*\[[^\]]*\]/, `$1${newCheckbox}`);
+				lines[task.originalLine] = updatedLine;
+
+				await this.plugin.app.vault.modify(file, lines.join('\n'));
+
+				// Update local task
+				task.status = newStatus;
+
+				// Re-render the board
+				await this.render();
+			}
+		} catch (error) {
+			console.error('Error updating task:', error);
+			new Notice('Error updating task');
+		}
+	}
+
+	private async loadTasks() {
+		this.tasks = [];
+
+		const folder = this.plugin.app.vault.getAbstractFileByPath(this.plugin.settings.folderPath);
+
+		if (!folder || !(folder instanceof TFolder)) {
+			new Notice(`Folder not found: ${this.plugin.settings.folderPath}`);
+			return;
+		}
+
+		const files = folder.children
+			?.filter((f): f is TFile => f instanceof TFile && f.extension === 'md')
+			|| [];
+
+		for (const file of files) {
+			try {
+				const content = await this.plugin.app.vault.read(file);
+				const tasks = this.parseTasksFromContent(content, file.name);
+				this.tasks.push(...tasks);
+			} catch (error) {
+				console.error(`Error reading file ${file.path}:`, error);
+			}
+		}
+	}
+
+	private parseTasksFromContent(content: string, filename: string): KanbanTask[] {
+		const tasks: KanbanTask[] = [];
+		const lines = content.split('\n');
+		let inTaskSection = false;
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+
+			// Check if we're entering the task section
+			if (line && line.includes(this.plugin.settings.heading)) {
+				inTaskSection = true;
+				continue;
+			}
+
+			// Exit task section if we hit another heading
+			if (inTaskSection && line && line.match(/^#+\s/)) {
+				inTaskSection = false;
+				continue;
+			}
+
+			// Parse task if we're in the section
+			if (inTaskSection && line) {
+				const taskMatch = line.match(/^(\s*)-\s*\[(.)\]\s*(.*)/);
+				if (taskMatch) {
+					const checkbox = taskMatch[2];
+					const text = taskMatch[3] ? taskMatch[3].trim() : '';
+
+					let status: KanbanTask['status'] = 'todo';
+					if (checkbox === 'b') status = 'backlog';
+					else if (checkbox === ' ') status = 'todo';
+					else if (checkbox === '/') status = 'in-progress';
+					else if (checkbox === 'x') status = 'done';
+
+					tasks.push({
+						text,
+						status,
+						sourceFile: filename,
+						originalLine: i
+					});
+				}
+			}
+		}
+
+		return tasks;
+	}
+
+	async onClose() {
+		// Clean up
 	}
 }
