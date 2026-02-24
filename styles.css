@@ -47,6 +47,13 @@
 	transition: all 0.2s ease;
 	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 	user-select: none;
+	display: flex;
+	flex-direction: column;
+	position: relative;
+}
+
+.kanban-card-content {
+	flex: 1;
 }
 
 .kanban-card:hover {
@@ -95,4 +102,66 @@
 
 .kanban-column.done {
 	--column-accent: var(--color-green);
+}
+
+/* Header with toggle button */
+.kanban-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 12px 16px 8px 16px;
+	border-bottom: 1px solid var(--divider-color);
+	margin-bottom: 12px;
+}
+
+.kanban-header h2 {
+	margin: 0;
+	font-size: 18px;
+	color: var(--text-normal);
+}
+
+.kanban-toggle-btn {
+	background-color: var(--background-secondary);
+	border: 1px solid var(--divider-color);
+	color: var(--text-normal);
+	cursor: pointer;
+	padding: 6px 12px;
+	border-radius: 4px;
+	font-size: 12px;
+	transition: all 0.2s ease;
+}
+
+.kanban-toggle-btn:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+/* Hide done column */
+.kanban-container.hide-done-column .kanban-column.done {
+	display: none;
+}
+
+/* Tag badges */
+.kanban-tag-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-size: 10px;
+	font-weight: 700;
+	margin-top: 6px;
+	text-transform: uppercase;
+}
+
+.kanban-tag-mit {
+	background-color: var(--color-red);
+	color: white;
+}
+
+.kanban-tag-i {
+	background-color: var(--color-yellow);
+	color: black;
+}
+
+.kanban-tag-ni {
+	background-color: var(--color-green);
+	color: white;
 }

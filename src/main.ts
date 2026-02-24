@@ -9,6 +9,7 @@ interface KanbanTask {
 	sourceFile: string;
 	sourceFileName: string;
 	originalLine: number;
+	tag?: 'MIT' | 'I' | 'NI';
 }
 
 export default class DailyKanbanPlugin extends Plugin {
@@ -107,6 +108,7 @@ class KanbanView extends ItemView {
 	draggedTask: KanbanTask | null = null;
 	isRendering: boolean = false;
 	renderTimeout: NodeJS.Timeout | null = null;
+	doneColumnHidden: boolean = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: DailyKanbanPlugin) {
 		super(leaf);
@@ -151,8 +153,15 @@ class KanbanView extends ItemView {
 				// Load tasks
 				await this.loadTasks();
 
+				// Add header
+				const headerDiv = container.createDiv('kanban-header');
+				const titleEl = headerDiv.createEl('h2', { text: 'Daily Kanban' });
+
 		// Create Kanban board
 		const kanbanContainer = container.createDiv('kanban-container');
+		if (this.doneColumnHidden) {
+			kanbanContainer.classList.add('hide-done-column');
+		}
 
 		const columns = [
 			{ id: 'backlog', label: 'Backlog', status: 'backlog' as const },
@@ -188,16 +197,31 @@ class KanbanView extends ItemView {
 		}, 300); // Debounce for 300ms
 	}
 
+	toggleDoneColumn() {
+		this.doneColumnHidden = !this.doneColumnHidden;
+		const kanbanContainer = this.containerEl.querySelector('.kanban-container');
+		if (kanbanContainer) {
+			kanbanContainer.classList.toggle('hide-done-column', this.doneColumnHidden);
+		}
+	}
+
 	private createCard(container: HTMLElement, task: KanbanTask) {
 		const card = container.createDiv('kanban-card');
 		card.draggable = true;
 		card.setAttribute('data-source', task.sourceFile);
 		card.setAttribute('data-line', task.originalLine.toString());
 
-		const title = card.createDiv('kanban-card-title');
+		const contentDiv = card.createDiv('kanban-card-content');
+
+		const title = contentDiv.createDiv('kanban-card-title');
 		title.textContent = task.text;
 
-		const source = card.createDiv('kanban-card-source');
+		if (task.tag) {
+			const badge = contentDiv.createEl('span', { text: task.tag });
+			badge.addClass('kanban-tag-badge', `kanban-tag-${task.tag.toLowerCase()}`);
+		}
+
+		const source = contentDiv.createDiv('kanban-card-source');
 		source.textContent = task.sourceFileName;
 
 		// Drag event listeners
@@ -218,7 +242,7 @@ class KanbanView extends ItemView {
 
 		// Click to cycle through statuses
 		card.addEventListener('click', (e) => {
-			if (e.button === 0) { // Left click
+			if (e.button === 0 && !(e.target as HTMLElement).closest('.kanban-card-collapse-btn')) { // Left click, exclude button
 				this.cycleTaskStatus(task);
 			}
 		});
@@ -362,7 +386,12 @@ class KanbanView extends ItemView {
 				const taskMatch = line.match(/^(\s*)-\s*\[(.)\]\s*(.*)/);
 				if (taskMatch) {
 					const checkbox = taskMatch[2];
-					const text = taskMatch[3] ? taskMatch[3].trim() : '';
+					let text = taskMatch[3] ? taskMatch[3].trim() : '';
+
+					// Parse tag from text
+					const tagMatch = text.match(/#(MIT|NI|I)\b/);
+					const tag = tagMatch ? tagMatch[1] as KanbanTask['tag'] : undefined;
+					const cleanText = text.replace(/#(MIT|NI|I)\b/, '').trim();
 
 					let status: KanbanTask['status'] = 'todo';
 					if (checkbox === 'b') status = 'backlog';
@@ -371,11 +400,12 @@ class KanbanView extends ItemView {
 					else if (checkbox === 'x') status = 'done';
 
 					tasks.push({
-						text,
+						text: cleanText,
 						status,
 						sourceFile: filePath,
 						sourceFileName: filename,
-						originalLine: i
+						originalLine: i,
+						tag
 					});
 				}
 			}
